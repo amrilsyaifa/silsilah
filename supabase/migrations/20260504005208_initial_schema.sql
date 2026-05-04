@@ -9,6 +9,7 @@ create table if not exists persons (
   birth_place text,
   is_alive    boolean not null default true,
   notes       text,
+  birth_order integer,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
