@@ -14,7 +14,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { db, auth } from '@/lib/firebase'
+import { db, auth, isAdmin } from '@/lib/firebase'
 import { Person, Relationship, PersonFormData } from '@/lib/types'
 import PersonForm from '@/components/admin/PersonForm'
 import RelationshipManager from '@/components/admin/RelationshipManager'
@@ -43,8 +43,9 @@ export default function AdminPage() {
   }, [])
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (!user) {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user || !isAdmin(user.email)) {
+        if (user) await signOut(auth)
         router.replace('/admin/login')
       } else {
         setUserEmail(user.email ?? '')

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Person, Relationship } from '@/lib/types'
+import SearchSelect from './SearchSelect'
 
 interface Props {
   persons: Person[]
@@ -38,14 +39,12 @@ export default function RelationshipManager({ persons, relationships, onAdd, onD
       <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
         <h3 className="text-sm font-semibold text-slate-600">Tambah Relasi</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <select value={personId} onChange={(e) => setPersonId(e.target.value)} className="input">
-            <option value="">-- Pilih orang --</option>
-            {persons.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            persons={persons}
+            value={personId}
+            onChange={setPersonId}
+            placeholder="-- Pilih orang --"
+          />
 
           <select
             value={type}
@@ -57,14 +56,12 @@ export default function RelationshipManager({ persons, relationships, onAdd, onD
             <option value="spouse">Pasangan dari</option>
           </select>
 
-          <select value={relatedId} onChange={(e) => setRelatedId(e.target.value)} className="input">
-            <option value="">-- Pilih orang --</option>
-            {persons.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            persons={persons}
+            value={relatedId}
+            onChange={setRelatedId}
+            placeholder="-- Pilih orang --"
+          />
         </div>
         <button
           onClick={handleAdd}
