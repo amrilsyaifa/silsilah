@@ -28,7 +28,7 @@ function PersonNode({ data, selected }: PersonNodeProps) {
       />
 
       <div className="flex items-center gap-2.5">
-        <span className="text-3xl shrink-0 leading-none">{isMale ? '👨' : '👩'}</span>
+        <span className="text-3xl shrink-0 leading-none">{isMale ? '👨' : '🧕'}</span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-slate-800 leading-snug truncate">
             {person.name}

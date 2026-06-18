@@ -177,7 +177,7 @@ export default function AdminPage() {
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="text-2xl shrink-0">
-                      {person.gender === 'male' ? '👨' : '👩'}
+                      {person.gender === 'male' ? '👨' : '🧕'}
                     </span>
                     <div className="min-w-0">
                       <p className="font-semibold text-slate-800 truncate">{person.name}</p>

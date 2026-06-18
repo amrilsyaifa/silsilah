@@ -11,7 +11,7 @@ interface Props {
 export default function PersonModal({ person, onClose }: Props) {
   if (!person) return null
 
-  const icon = person.gender === 'male' ? '👨' : '👩'
+  const icon = person.gender === 'male' ? '👨' : '🧕'
 
   return (
     <div
