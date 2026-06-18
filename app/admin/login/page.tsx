@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
+import { signInWithEmailAndPassword } from 'firebase/auth'
+import { auth } from '@/lib/firebase'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -16,15 +17,13 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
 
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-
-    if (error) {
-      setError('Email atau password salah.')
-      setLoading(false)
-    } else {
+    try {
+      await signInWithEmailAndPassword(auth, email, password)
       router.push('/admin')
       router.refresh()
+    } catch {
+      setError('Email atau password salah.')
+      setLoading(false)
     }
   }
 

@@ -2,7 +2,19 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
+import {
+  collection,
+  getDocs,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  orderBy,
+  query,
+  serverTimestamp,
+} from 'firebase/firestore'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
+import { db, auth } from '@/lib/firebase'
 import { Person, Relationship, PersonFormData } from '@/lib/types'
 import PersonForm from '@/components/admin/PersonForm'
 import RelationshipManager from '@/components/admin/RelationshipManager'
@@ -12,7 +24,6 @@ type Modal = { type: 'add' } | { type: 'edit'; person: Person } | null
 
 export default function AdminPage() {
   const router = useRouter()
-  const supabase = createClient()
 
   const [persons, setPersons] = useState<Person[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
@@ -23,28 +34,29 @@ export default function AdminPage() {
   const [userEmail, setUserEmail] = useState('')
 
   const loadData = useCallback(async () => {
-    const [{ data: pData }, { data: rData }] = await Promise.all([
-      supabase.from('persons').select('*').order('name'),
-      supabase.from('relationships').select('*'),
+    const [personsSnap, relsSnap] = await Promise.all([
+      getDocs(query(collection(db, 'persons'), orderBy('name'))),
+      getDocs(collection(db, 'relationships')),
     ])
-    setPersons(pData ?? [])
-    setRelationships(rData ?? [])
+    setPersons(personsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Person))
+    setRelationships(relsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Relationship))
   }, [])
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
         router.replace('/admin/login')
       } else {
-        setUserEmail(data.user.email ?? '')
+        setUserEmail(user.email ?? '')
         setLoading(false)
         loadData()
       }
     })
-  }, [])
+    return unsubscribe
+  }, [loadData, router])
 
   const handleLogout = async () => {
-    await supabase.auth.signOut()
+    await signOut(auth)
     router.replace('/admin/login')
   }
 
@@ -57,12 +69,16 @@ export default function AdminPage() {
       birth_place: data.birth_place || null,
       is_alive: data.is_alive,
       notes: data.notes || null,
+      updated_at: serverTimestamp(),
     }
 
     if (modal?.type === 'edit') {
-      await supabase.from('persons').update(payload).eq('id', modal.person.id)
+      await updateDoc(doc(db, 'persons', modal.person.id), payload)
     } else {
-      await supabase.from('persons').insert(payload)
+      await addDoc(collection(db, 'persons'), {
+        ...payload,
+        created_at: serverTimestamp(),
+      })
     }
 
     await loadData()
@@ -71,17 +87,17 @@ export default function AdminPage() {
 
   const handleDeletePerson = async (id: string) => {
     if (!confirm('Hapus anggota ini?')) return
-    await supabase.from('persons').delete().eq('id', id)
+    await deleteDoc(doc(db, 'persons', id))
     await loadData()
   }
 
   const handleAddRelationship = async (rel: Omit<Relationship, 'id'>) => {
-    await supabase.from('relationships').insert(rel)
+    await addDoc(collection(db, 'relationships'), rel)
     await loadData()
   }
 
   const handleDeleteRelationship = async (id: string) => {
-    await supabase.from('relationships').delete().eq('id', id)
+    await deleteDoc(doc(db, 'relationships', id))
     await loadData()
   }
 

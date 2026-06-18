@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase'
+import { collection, getDocs, orderBy, query } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 import { Person, Relationship } from '@/lib/types'
 import FamilyTree from '@/components/FamilyTree'
 
@@ -11,15 +12,13 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const supabase = createClient()
-
     async function load() {
-      const [{ data: pData }, { data: rData }] = await Promise.all([
-        supabase.from('persons').select('*').order('created_at'),
-        supabase.from('relationships').select('*'),
+      const [personsSnap, relsSnap] = await Promise.all([
+        getDocs(query(collection(db, 'persons'), orderBy('created_at'))),
+        getDocs(collection(db, 'relationships')),
       ])
-      setPersons(pData ?? [])
-      setRelationships(rData ?? [])
+      setPersons(personsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Person))
+      setRelationships(relsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Relationship))
       setLoading(false)
     }
 
