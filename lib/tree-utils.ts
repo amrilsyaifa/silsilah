@@ -13,7 +13,8 @@ export interface PersonNodeData {
 
 export function buildTreeElements(
   persons: Person[],
-  relationships: Relationship[]
+  relationships: Relationship[],
+  savedPositions?: Map<string, { x: number; y: number }>
 ): { nodes: Node<PersonNodeData>[]; edges: Edge[]; rootId: string | null } {
   if (persons.length === 0) return { nodes: [], edges: [], rootId: null }
 
@@ -219,7 +220,7 @@ export function buildTreeElements(
     .map((person) => ({
       id: person.id,
       type: 'personNode',
-      position: positions.get(person.id)!,
+      position: savedPositions?.get(person.id) ?? positions.get(person.id)!,
       data: { person },
     }))
 

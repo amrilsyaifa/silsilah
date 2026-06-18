@@ -24,23 +24,28 @@ const nodeTypes = { personNode: PersonNode }
 interface Props {
   persons: Person[]
   relationships: Relationship[]
+  savedPositions?: Map<string, { x: number; y: number }>
+  onNodeDragStop?: (personId: string, position: { x: number; y: number }) => void
 }
 
-function TreeInner({ persons, relationships }: Props) {
+function TreeInner({ persons, relationships, savedPositions, onNodeDragStop }: Props) {
   const { fitView, setCenter } = useReactFlow()
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [matchIds, setMatchIds] = useState<Set<string>>(new Set())
 
   const { nodes: initialNodes, edges: initialEdges, rootId } = useMemo(
-    () => buildTreeElements(persons, relationships),
-    [persons, relationships]
+    () => buildTreeElements(persons, relationships, savedPositions),
+    [persons, relationships, savedPositions]
   )
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, , onEdgesChange] = useEdgesState(initialEdges)
 
-  // On mount: fitView to root + level-1 children only so nodes are readable
+  useEffect(() => {
+    setNodes(initialNodes)
+  }, [initialNodes, setNodes])
+
   useEffect(() => {
     if (!rootId) return
     const level1Ids = relationships
@@ -102,6 +107,14 @@ function TreeInner({ persons, relationships }: Props) {
     []
   )
 
+  const handleNodeDragStop = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (_event: any, node: Node<PersonNodeData>) => {
+      onNodeDragStop?.(node.id, node.position)
+    },
+    [onNodeDragStop]
+  )
+
   return (
     <div className="w-full h-full relative">
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-72 sm:w-96">
@@ -117,6 +130,7 @@ function TreeInner({ persons, relationships }: Props) {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
+        onNodeDragStop={handleNodeDragStop}
         nodeTypes={nodeTypes}
         minZoom={0.05}
         maxZoom={2}
@@ -134,10 +148,15 @@ function TreeInner({ persons, relationships }: Props) {
   )
 }
 
-export default function FamilyTree({ persons, relationships }: Props) {
+export default function FamilyTree({ persons, relationships, savedPositions, onNodeDragStop }: Props) {
   return (
     <ReactFlowProvider>
-      <TreeInner persons={persons} relationships={relationships} />
+      <TreeInner
+        persons={persons}
+        relationships={relationships}
+        savedPositions={savedPositions}
+        onNodeDragStop={onNodeDragStop}
+      />
     </ReactFlowProvider>
   )
 }

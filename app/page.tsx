@@ -1,29 +1,69 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { collection, getDocs, orderBy, query } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { onAuthStateChanged } from 'firebase/auth'
+import { db, auth, isAdmin } from '@/lib/firebase'
 import { Person, Relationship } from '@/lib/types'
+import { loadPositions, savePosition, NodePosition } from '@/lib/position-store'
 import FamilyTree from '@/components/FamilyTree'
 
 export default function HomePage() {
   const [persons, setPersons] = useState<Person[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
+  const [positions, setPositions] = useState<Map<string, NodePosition>>(new Map())
   const [loading, setLoading] = useState(true)
+  const [canSave, setCanSave] = useState(false)
+  const saveTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map())
 
   useEffect(() => {
     async function load() {
-      const [personsSnap, relsSnap] = await Promise.all([
+      const [personsSnap, relsSnap, savedPositions] = await Promise.all([
         getDocs(query(collection(db, 'persons'), orderBy('created_at'))),
         getDocs(collection(db, 'relationships')),
+        loadPositions(),
       ])
       setPersons(personsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Person))
       setRelationships(relsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Relationship))
+      setPositions(savedPositions)
       setLoading(false)
     }
 
     load()
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCanSave(isAdmin(user?.email))
+    })
+    return unsubscribe
   }, [])
+
+  const handleNodeDragStop = useCallback(
+    (personId: string, position: { x: number; y: number }) => {
+      if (!canSave) return
+
+      setPositions((prev) => {
+        const next = new Map(prev)
+        next.set(personId, position)
+        return next
+      })
+
+      const existing = saveTimeouts.current.get(personId)
+      if (existing) clearTimeout(existing)
+
+      saveTimeouts.current.set(
+        personId,
+        setTimeout(async () => {
+          try {
+            await savePosition(personId, position)
+          } catch (err) {
+            console.error('Failed to save position:', err)
+          }
+          saveTimeouts.current.delete(personId)
+        }, 500)
+      )
+    },
+    [canSave]
+  )
 
   if (loading) {
     return (
@@ -67,7 +107,12 @@ export default function HomePage() {
       </header>
 
       <div className="flex-1 min-h-0">
-        <FamilyTree persons={persons} relationships={relationships} />
+        <FamilyTree
+          persons={persons}
+          relationships={relationships}
+          savedPositions={positions}
+          onNodeDragStop={canSave ? handleNodeDragStop : undefined}
+        />
       </div>
     </div>
   )
