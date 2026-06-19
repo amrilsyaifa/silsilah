@@ -9,6 +9,7 @@ import {
   useEdgesState,
   useReactFlow,
   ReactFlowProvider,
+  SelectionMode,
   Node,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -25,10 +26,11 @@ interface Props {
   persons: Person[]
   relationships: Relationship[]
   savedPositions?: Map<string, { x: number; y: number }>
-  onNodeDragStop?: (personId: string, position: { x: number; y: number }) => void
+  editable?: boolean
+  onPositionsChange?: (positions: Map<string, { x: number; y: number }>) => void
 }
 
-function TreeInner({ persons, relationships, savedPositions, onNodeDragStop }: Props) {
+function TreeInner({ persons, relationships, savedPositions, editable = false, onPositionsChange }: Props) {
   const { fitView, setCenter } = useReactFlow()
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -102,27 +104,40 @@ function TreeInner({ persons, relationships, savedPositions, onNodeDragStop }: P
 
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node<PersonNodeData>) => {
-      setSelectedPerson(node.data.person)
+      if (!editable) {
+        setSelectedPerson(node.data.person)
+      }
     },
-    []
+    [editable]
   )
 
-  const handleNodeDragStop = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (_event: any, node: Node<PersonNodeData>) => {
-      onNodeDragStop?.(node.id, node.position)
-    },
-    [onNodeDragStop]
-  )
+  const emitPositions = useCallback(() => {
+    if (!onPositionsChange) return
+    const map = new Map<string, { x: number; y: number }>()
+    for (const n of nodes) {
+      map.set(n.id, { x: n.position.x, y: n.position.y })
+    }
+    onPositionsChange(map)
+  }, [nodes, onPositionsChange])
+
+  const handleNodeDragStop = useCallback(() => {
+    emitPositions()
+  }, [emitPositions])
+
+  const handleSelectionDragStop = useCallback(() => {
+    emitPositions()
+  }, [emitPositions])
 
   return (
     <div className="w-full h-full relative">
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-72 sm:w-96">
-        <SearchBar
-          onSearch={handleSearch}
-          matchCount={searchQuery ? matchIds.size : undefined}
-        />
-      </div>
+      {!editable && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-72 sm:w-96">
+          <SearchBar
+            onSearch={handleSearch}
+            matchCount={searchQuery ? matchIds.size : undefined}
+          />
+        </div>
+      )}
 
       <ReactFlow
         nodes={nodes}
@@ -130,8 +145,13 @@ function TreeInner({ persons, relationships, savedPositions, onNodeDragStop }: P
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
-        onNodeDragStop={handleNodeDragStop}
+        onNodeDragStop={editable ? handleNodeDragStop : undefined}
+        onSelectionDragStop={editable ? handleSelectionDragStop : undefined}
         nodeTypes={nodeTypes}
+        nodesDraggable={editable}
+        selectionOnDrag={editable}
+        selectionMode={editable ? SelectionMode.Partial : undefined}
+        panOnDrag={editable ? [1] : true}
         minZoom={0.05}
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
@@ -148,15 +168,10 @@ function TreeInner({ persons, relationships, savedPositions, onNodeDragStop }: P
   )
 }
 
-export default function FamilyTree({ persons, relationships, savedPositions, onNodeDragStop }: Props) {
+export default function FamilyTree(props: Props) {
   return (
     <ReactFlowProvider>
-      <TreeInner
-        persons={persons}
-        relationships={relationships}
-        savedPositions={savedPositions}
-        onNodeDragStop={onNodeDragStop}
-      />
+      <TreeInner {...props} />
     </ReactFlowProvider>
   )
 }

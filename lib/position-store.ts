@@ -22,6 +22,14 @@ export async function savePosition(personId: string, pos: NodePosition): Promise
   await setDoc(doc(db, COLLECTION, personId), { x: pos.x, y: pos.y }, { merge: true })
 }
 
+export async function saveAllPositions(positions: Map<string, NodePosition>): Promise<void> {
+  const batch = writeBatch(db)
+  for (const [personId, pos] of positions) {
+    batch.set(doc(db, COLLECTION, personId), { x: pos.x, y: pos.y }, { merge: true })
+  }
+  await batch.commit()
+}
+
 export async function clearAllPositions(): Promise<void> {
   const snap = await getDocs(collection(db, COLLECTION))
   if (snap.empty) return

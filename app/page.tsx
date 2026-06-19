@@ -1,11 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { collection, getDocs, orderBy, query } from 'firebase/firestore'
-import { onAuthStateChanged } from 'firebase/auth'
-import { db, auth, isAdmin } from '@/lib/firebase'
+import { db } from '@/lib/firebase'
 import { Person, Relationship } from '@/lib/types'
-import { loadPositions, savePosition, NodePosition } from '@/lib/position-store'
+import { loadPositions, NodePosition } from '@/lib/position-store'
 import FamilyTree from '@/components/FamilyTree'
 
 export default function HomePage() {
@@ -13,8 +12,6 @@ export default function HomePage() {
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [positions, setPositions] = useState<Map<string, NodePosition>>(new Map())
   const [loading, setLoading] = useState(true)
-  const [canSave, setCanSave] = useState(false)
-  const saveTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map())
 
   useEffect(() => {
     async function load() {
@@ -30,40 +27,7 @@ export default function HomePage() {
     }
 
     load()
-
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCanSave(isAdmin(user?.email))
-    })
-    return unsubscribe
   }, [])
-
-  const handleNodeDragStop = useCallback(
-    (personId: string, position: { x: number; y: number }) => {
-      if (!canSave) return
-
-      setPositions((prev) => {
-        const next = new Map(prev)
-        next.set(personId, position)
-        return next
-      })
-
-      const existing = saveTimeouts.current.get(personId)
-      if (existing) clearTimeout(existing)
-
-      saveTimeouts.current.set(
-        personId,
-        setTimeout(async () => {
-          try {
-            await savePosition(personId, position)
-          } catch (err) {
-            console.error('Failed to save position:', err)
-          }
-          saveTimeouts.current.delete(personId)
-        }, 500)
-      )
-    },
-    [canSave]
-  )
 
   if (loading) {
     return (
@@ -111,7 +75,6 @@ export default function HomePage() {
           persons={persons}
           relationships={relationships}
           savedPositions={positions}
-          onNodeDragStop={canSave ? handleNodeDragStop : undefined}
         />
       </div>
     </div>

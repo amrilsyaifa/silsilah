@@ -16,10 +16,12 @@ import {
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { db, auth, isAdmin } from '@/lib/firebase'
 import { Person, Relationship, PersonFormData } from '@/lib/types'
+import { loadPositions, saveAllPositions, NodePosition } from '@/lib/position-store'
 import PersonForm from '@/components/admin/PersonForm'
 import RelationshipManager from '@/components/admin/RelationshipManager'
+import FamilyTree from '@/components/FamilyTree'
 
-type Tab = 'persons' | 'relationships'
+type Tab = 'persons' | 'relationships' | 'layout'
 type Modal = { type: 'add' } | { type: 'edit'; person: Person } | null
 
 export default function AdminPage() {
@@ -33,13 +35,20 @@ export default function AdminPage() {
   const [search, setSearch] = useState('')
   const [userEmail, setUserEmail] = useState('')
 
+  const [savedPositions, setSavedPositions] = useState<Map<string, NodePosition>>(new Map())
+  const [draftPositions, setDraftPositions] = useState<Map<string, NodePosition> | null>(null)
+  const [saving, setSaving] = useState(false)
+
   const loadData = useCallback(async () => {
-    const [personsSnap, relsSnap] = await Promise.all([
-      getDocs(query(collection(db, 'persons'), orderBy('name'))),
+    const [personsSnap, relsSnap, positions] = await Promise.all([
+      getDocs(query(collection(db, 'persons'), orderBy('created_at'))),
       getDocs(collection(db, 'relationships')),
+      loadPositions(),
     ])
     setPersons(personsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Person))
     setRelationships(relsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Relationship))
+    setSavedPositions(positions)
+    setDraftPositions(null)
   }, [])
 
   useEffect(() => {
@@ -102,6 +111,29 @@ export default function AdminPage() {
     await loadData()
   }
 
+  const handlePositionsChange = useCallback((positions: Map<string, { x: number; y: number }>) => {
+    setDraftPositions(positions)
+  }, [])
+
+  const handleSaveLayout = async () => {
+    if (!draftPositions) return
+    setSaving(true)
+    try {
+      await saveAllPositions(draftPositions)
+      setSavedPositions(draftPositions)
+      setDraftPositions(null)
+    } catch (err) {
+      console.error('Failed to save layout:', err)
+      alert('Gagal menyimpan layout. Silakan coba lagi.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleResetLayout = () => {
+    setDraftPositions(null)
+  }
+
   const filteredPersons = persons.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase())
   )
@@ -115,9 +147,9 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-full bg-slate-50">
+    <div className={`bg-slate-50 ${tab === 'layout' ? 'h-full flex flex-col' : 'min-h-full'}`}>
       {/* Header */}
-      <header className="bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between sticky top-0 z-20">
+      <header className="bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shrink-0">
         <div className="flex items-center gap-2">
           <a href="/" className="text-slate-400 hover:text-slate-600 text-sm">←</a>
           <span className="text-2xl">🌳</span>
@@ -125,16 +157,16 @@ export default function AdminPage() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-400 hidden sm:block">{userEmail}</span>
-          <button onClick={handleLogout} className="btn-secondary !py-1.5 !px-3 text-xs">
+          <button onClick={handleLogout} className="btn-secondary py-1.5! px-3! text-xs">
             Keluar
           </button>
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto p-4 space-y-4">
-        {/* Tabs */}
-        <div className="flex gap-2">
-          {(['persons', 'relationships'] as Tab[]).map((t) => (
+      {/* Tabs */}
+      <div className={`${tab === 'layout' ? '' : 'max-w-4xl mx-auto'} p-4 ${tab === 'layout' ? 'flex flex-col flex-1 min-h-0 space-y-3' : 'space-y-4'}`}>
+        <div className="flex gap-2 shrink-0">
+          {(['persons', 'relationships', 'layout'] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -144,7 +176,7 @@ export default function AdminPage() {
                   : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
               }`}
             >
-              {t === 'persons' ? '👥 Anggota' : '🔗 Relasi'}
+              {t === 'persons' ? '👥 Anggota' : t === 'relationships' ? '🔗 Relasi' : '📐 Layout'}
             </button>
           ))}
         </div>
@@ -193,13 +225,13 @@ export default function AdminPage() {
                   <div className="flex gap-2 shrink-0">
                     <button
                       onClick={() => setModal({ type: 'edit', person })}
-                      className="btn-secondary !py-1.5 !px-3 text-xs"
+                      className="btn-secondary py-1.5! px-3! text-xs"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleDeletePerson(person.id)}
-                      className="btn-danger !py-1.5 !px-3 text-xs"
+                      className="btn-danger py-1.5! px-3! text-xs"
                     >
                       Hapus
                     </button>
@@ -220,6 +252,44 @@ export default function AdminPage() {
               onDelete={handleDeleteRelationship}
             />
           </div>
+        )}
+
+        {/* Layout tab */}
+        {tab === 'layout' && (
+          <>
+            <div className="flex items-center gap-3 shrink-0">
+              <p className="text-sm text-slate-500 flex-1">
+                Drag node untuk atur posisi. Klik kiri + drag di area kosong untuk select banyak node.
+                {draftPositions && (
+                  <span className="text-amber-600 font-medium ml-2">Ada perubahan belum disimpan</span>
+                )}
+              </p>
+              {draftPositions && (
+                <button
+                  onClick={handleResetLayout}
+                  className="btn-secondary py-1.5! px-3! text-xs whitespace-nowrap"
+                >
+                  Reset
+                </button>
+              )}
+              <button
+                onClick={handleSaveLayout}
+                disabled={!draftPositions || saving}
+                className="btn-primary py-1.5! px-4! text-sm whitespace-nowrap disabled:opacity-50"
+              >
+                {saving ? 'Menyimpan...' : 'Simpan Layout'}
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 rounded-2xl overflow-hidden border border-slate-200">
+              <FamilyTree
+                persons={persons}
+                relationships={relationships}
+                savedPositions={draftPositions ?? savedPositions}
+                editable
+                onPositionsChange={handlePositionsChange}
+              />
+            </div>
+          </>
         )}
       </div>
 
