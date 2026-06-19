@@ -218,7 +218,7 @@ export default function AdminPage() {
                         {person.gender === 'male' ? 'Laki-laki' : 'Perempuan'}
                         {person.birth_date && ` · ${new Date(person.birth_date).getFullYear()}`}
                         {person.phone && ` · 📱 ${person.phone}`}
-                        {!person.is_alive && ' · †'}
+                        {!person.is_alive && ` · ${person.gender === 'male' ? 'رَحِمَهُ ٱللَّٰهُ' : 'رَحِمَهَا ٱللَّٰهُ'}`}
                       </p>
                     </div>
                   </div>

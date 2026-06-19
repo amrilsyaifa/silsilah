@@ -29,7 +29,7 @@ export default function PersonModal({ person, onClose }: Props) {
             <h2 className="text-xl font-bold text-slate-800">{person.name}</h2>
             <p className="text-sm text-slate-500 capitalize">
               {person.gender === 'male' ? 'Laki-laki' : 'Perempuan'}
-              {!person.is_alive && ' · Almarhum/ah'}
+              {!person.is_alive && ` · ${person.gender === 'male' ? 'رَحِمَهُ ٱللَّٰهُ' : 'رَحِمَهَا ٱللَّٰهُ'}`}
             </p>
           </div>
           <button

@@ -35,7 +35,9 @@ function PersonNode({ data, selected }: PersonNodeProps) {
           </p>
           <div className="flex items-center gap-1.5 mt-0.5">
             {!person.is_alive && (
-              <span className="text-xs text-slate-400 font-medium">†</span>
+              <span className="text-xs text-slate-400 font-medium">
+                {person.gender === 'male' ? 'رَحِمَهُ ٱللَّٰهُ' : 'رَحِمَهَا ٱللَّٰهُ'}
+              </span>
             )}
             {person.birth_date && (
               <span className="text-xs text-slate-400">
