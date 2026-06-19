@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   collection,
@@ -20,8 +20,9 @@ import { loadPositions, saveAllPositions, NodePosition } from '@/lib/position-st
 import PersonForm from '@/components/admin/PersonForm'
 import RelationshipManager from '@/components/admin/RelationshipManager'
 import FamilyTree from '@/components/FamilyTree'
+import { exportBackup, importBackup } from '@/lib/backup'
 
-type Tab = 'persons' | 'relationships' | 'layout'
+type Tab = 'persons' | 'relationships' | 'layout' | 'backup'
 type Modal = { type: 'add' } | { type: 'edit'; person: Person } | null
 
 export default function AdminPage() {
@@ -166,19 +167,27 @@ export default function AdminPage() {
       {/* Tabs */}
       <div className={`${tab === 'layout' ? '' : 'max-w-4xl mx-auto'} p-4 ${tab === 'layout' ? 'flex flex-col flex-1 min-h-0 space-y-3' : 'space-y-4'}`}>
         <div className="flex gap-2 shrink-0">
-          {(['persons', 'relationships', 'layout'] as Tab[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
-                tab === t
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              {t === 'persons' ? '👥 Anggota' : t === 'relationships' ? '🔗 Relasi' : '📐 Layout'}
-            </button>
-          ))}
+          {(['persons', 'relationships', 'layout', 'backup'] as Tab[]).map((t) => {
+            const labels: Record<Tab, string> = {
+              persons: '👥 Anggota',
+              relationships: '🔗 Relasi',
+              layout: '📐 Layout',
+              backup: '💾 Backup',
+            }
+            return (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
+                  tab === t
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                {labels[t]}
+              </button>
+            )
+          })}
         </div>
 
         {/* Persons tab */}
@@ -291,6 +300,11 @@ export default function AdminPage() {
             </div>
           </>
         )}
+
+        {/* Backup tab */}
+        {tab === 'backup' && (
+          <BackupTab onRestored={loadData} />
+        )}
       </div>
 
       {/* Modal overlay */}
@@ -314,6 +328,77 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function BackupTab({ onRestored }: { onRestored: () => Promise<void> }) {
+  const [exporting, setExporting] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const handleExport = async () => {
+    setExporting(true)
+    setResult(null)
+    try {
+      await exportBackup()
+      setResult('Backup berhasil di-download.')
+    } catch {
+      setResult('Gagal membuat backup.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleImport = async () => {
+    const file = fileRef.current?.files?.[0]
+    if (!file) return
+    if (!confirm('Ini akan menimpa SEMUA data yang ada. Lanjutkan?')) return
+
+    setImporting(true)
+    setResult(null)
+    try {
+      const counts = await importBackup(file)
+      setResult(`Restore berhasil: ${counts.persons} anggota, ${counts.relationships} relasi, ${counts.node_positions} posisi.`)
+      await onRestored()
+      if (fileRef.current) fileRef.current.value = ''
+    } catch (err) {
+      setResult(`Restore gagal: ${err instanceof Error ? err.message : 'Format tidak valid'}`)
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6 max-w-lg">
+      {result && (
+        <div className={`text-sm rounded-xl px-4 py-3 ${result.includes('gagal') || result.includes('Gagal') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'}`}>
+          {result}
+        </div>
+      )}
+
+      <div className="bg-white rounded-2xl border border-slate-100 p-6 space-y-3">
+        <h3 className="font-semibold text-slate-800">Download Backup</h3>
+        <p className="text-sm text-slate-500">Download semua data (anggota, relasi, posisi layout) sebagai file JSON.</p>
+        <button onClick={handleExport} disabled={exporting} className="btn-primary">
+          {exporting ? 'Mengunduh...' : '📥 Download Backup'}
+        </button>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-100 p-6 space-y-3">
+        <h3 className="font-semibold text-slate-800">Restore dari Backup</h3>
+        <p className="text-sm text-slate-500">Upload file JSON backup untuk mengembalikan data. Data yang ada sekarang akan ditimpa.</p>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json"
+          className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+        />
+        <button onClick={handleImport} disabled={importing || !fileRef.current?.files?.length} className="btn-danger">
+          {importing ? 'Memulihkan...' : '📤 Restore Data'}
+        </button>
+      </div>
     </div>
   )
 }
