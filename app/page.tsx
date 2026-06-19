@@ -1,29 +1,69 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Component, ReactNode, useEffect, useState } from 'react'
 import { collection, getDocs, orderBy, query } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Person, Relationship } from '@/lib/types'
 import { loadPositions, NodePosition } from '@/lib/position-store'
 import FamilyTree from '@/components/FamilyTree'
 
+class TreeErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex h-full items-center justify-center p-6">
+          <div className="text-center space-y-3 max-w-sm">
+            <div className="text-4xl">⚠️</div>
+            <h2 className="text-lg font-bold text-slate-700">Gagal memuat pohon keluarga</h2>
+            <p className="text-sm text-slate-500">
+              {this.state.error.message}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="btn-primary text-sm"
+            >
+              Muat Ulang
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function HomePage() {
   const [persons, setPersons] = useState<Person[]>([])
   const [relationships, setRelationships] = useState<Relationship[]>([])
   const [positions, setPositions] = useState<Map<string, NodePosition>>(new Map())
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
-      const [personsSnap, relsSnap, savedPositions] = await Promise.all([
-        getDocs(query(collection(db, 'persons'), orderBy('created_at'))),
-        getDocs(collection(db, 'relationships')),
-        loadPositions(),
-      ])
-      setPersons(personsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Person))
-      setRelationships(relsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Relationship))
-      setPositions(savedPositions)
-      setLoading(false)
+      try {
+        const [personsSnap, relsSnap, savedPositions] = await Promise.all([
+          getDocs(query(collection(db, 'persons'), orderBy('created_at'))),
+          getDocs(collection(db, 'relationships')),
+          loadPositions(),
+        ])
+        setPersons(personsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Person))
+        setRelationships(relsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Relationship))
+        setPositions(savedPositions)
+      } catch (err) {
+        setLoadError(err instanceof Error ? err.message : 'Gagal memuat data')
+      } finally {
+        setLoading(false)
+      }
     }
 
     load()
@@ -35,6 +75,21 @@ export default function HomePage() {
         <div className="text-center space-y-3">
           <div className="text-4xl animate-pulse">🌳</div>
           <p className="text-slate-500 text-sm">Memuat silsilah keluarga...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <div className="text-center space-y-3 max-w-sm">
+          <div className="text-4xl">⚠️</div>
+          <h2 className="text-lg font-bold text-slate-700">Terjadi Kesalahan</h2>
+          <p className="text-sm text-slate-500">{loadError}</p>
+          <button onClick={() => window.location.reload()} className="btn-primary text-sm">
+            Coba Lagi
+          </button>
         </div>
       </div>
     )
@@ -71,11 +126,13 @@ export default function HomePage() {
       </header>
 
       <div className="flex-1 min-h-0">
-        <FamilyTree
-          persons={persons}
-          relationships={relationships}
-          savedPositions={positions}
-        />
+        <TreeErrorBoundary>
+          <FamilyTree
+            persons={persons}
+            relationships={relationships}
+            savedPositions={positions}
+          />
+        </TreeErrorBoundary>
       </div>
     </div>
   )
