@@ -1,17 +1,19 @@
 'use client'
 
-import { Person } from '@/lib/types'
-import { formatPhone } from '@/lib/tree-utils'
+import { Person, Relationship } from '@/lib/types'
+import { formatPhone, countDescendants } from '@/lib/tree-utils'
 
 interface Props {
   person: Person | null
+  relationships: Relationship[]
   onClose: () => void
 }
 
-export default function PersonModal({ person, onClose }: Props) {
+export default function PersonModal({ person, relationships, onClose }: Props) {
   if (!person) return null
 
   const icon = person.gender === 'male' ? '👨' : '🧕'
+  const descendants = countDescendants(person.id, relationships)
 
   return (
     <div
@@ -56,6 +58,21 @@ export default function PersonModal({ person, onClose }: Props) {
           {person.birth_place && <Row label="Tempat Lahir">{person.birth_place}</Row>}
           {person.notes && <Row label="Catatan">{person.notes}</Row>}
         </div>
+
+        {/* Descendants */}
+        {descendants.length > 0 && (
+          <>
+            <hr className="border-slate-100" />
+            <div className="space-y-2 text-sm">
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Keturunan</p>
+              {descendants.map((d) => (
+                <Row key={d.label} label={d.label}>
+                  {d.count} orang
+                </Row>
+              ))}
+            </div>
+          </>
+        )}
 
         {/* WA Button */}
         {person.phone && (

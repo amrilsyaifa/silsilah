@@ -8,6 +8,7 @@ const LEVEL_HEIGHT = 180
 
 export interface PersonNodeData {
   person: Person
+  isRoot?: boolean
   [key: string]: unknown
 }
 
@@ -221,10 +222,58 @@ export function buildTreeElements(
       id: person.id,
       type: 'personNode',
       position: savedPositions?.get(person.id) ?? positions.get(person.id)!,
-      data: { person },
+      data: { person, isRoot: person.id === rootId },
     }))
 
   return { nodes, edges: [...parentChildEdges, ...spouseEdges], rootId }
+}
+
+const DESCENDANT_LABELS = ['Anak', 'Cucu', 'Cicit', 'Piut', 'Canggah']
+
+export function countDescendants(
+  personId: string,
+  relationships: Relationship[]
+): { label: string; count: number }[] {
+  const childrenOf = new Map<string, string[]>()
+  for (const r of relationships) {
+    if (r.type === 'father' || r.type === 'mother') {
+      if (!childrenOf.has(r.person_id)) childrenOf.set(r.person_id, [])
+      const arr = childrenOf.get(r.person_id)!
+      if (!arr.includes(r.related_person_id)) arr.push(r.related_person_id)
+    }
+  }
+
+  const spouseOf = new Map<string, string>()
+  for (const r of relationships) {
+    if (r.type === 'spouse') {
+      spouseOf.set(r.person_id, r.related_person_id)
+      spouseOf.set(r.related_person_id, r.person_id)
+    }
+  }
+
+  const results: { label: string; count: number }[] = []
+  let currentLevel = [personId]
+  let depth = 0
+
+  while (true) {
+    const seen = new Set<string>()
+    for (const id of currentLevel) {
+      for (const kid of childrenOf.get(id) ?? []) seen.add(kid)
+      const spouse = spouseOf.get(id)
+      if (spouse) {
+        for (const kid of childrenOf.get(spouse) ?? []) seen.add(kid)
+      }
+    }
+    if (seen.size === 0) break
+    const label = depth < DESCENDANT_LABELS.length
+      ? DESCENDANT_LABELS[depth]
+      : `Keturunan level ${depth + 1}`
+    results.push({ label, count: seen.size })
+    currentLevel = [...seen]
+    depth++
+  }
+
+  return results
 }
 
 export function formatPhone(phone: string): string {

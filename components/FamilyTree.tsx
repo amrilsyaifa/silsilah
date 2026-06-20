@@ -31,7 +31,7 @@ interface Props {
 }
 
 function TreeInner({ persons, relationships, savedPositions, editable = false, onPositionsChange }: Props) {
-  const { fitView, setCenter } = useReactFlow()
+  const { setCenter } = useReactFlow()
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [matchIds, setMatchIds] = useState<Set<string>>(new Set())
@@ -50,21 +50,17 @@ function TreeInner({ persons, relationships, savedPositions, editable = false, o
 
   useEffect(() => {
     if (!rootId) return
-    const level1Ids = relationships
-      .filter((r) => r.person_id === rootId && r.type !== 'spouse')
-      .map((r) => r.related_person_id)
-    const focusIds = new Set([rootId, ...level1Ids])
-    const focusNodes = initialNodes.filter((n) => focusIds.has(n.id))
+    const rootNode = initialNodes.find((n) => n.id === rootId)
+    if (!rootNode) return
 
     setTimeout(() => {
-      fitView({
-        nodes: focusNodes,
-        padding: 0.25,
-        duration: 600,
-        maxZoom: 1,
-      })
+      setCenter(
+        rootNode.position.x + 115,
+        rootNode.position.y + 45,
+        { zoom: 0.7, duration: 600 }
+      )
     }, 120)
-  }, [fitView, rootId, initialNodes, relationships])
+  }, [setCenter, rootId, initialNodes])
 
   const handleSearch = useCallback(
     (query: string) => {
@@ -152,6 +148,8 @@ function TreeInner({ persons, relationships, savedPositions, editable = false, o
         selectionOnDrag={editable}
         selectionMode={editable ? SelectionMode.Partial : undefined}
         panOnDrag={editable ? [1] : true}
+        snapToGrid={editable}
+        snapGrid={[24, 24]}
         minZoom={0.05}
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
@@ -163,7 +161,7 @@ function TreeInner({ persons, relationships, savedPositions, editable = false, o
         />
       </ReactFlow>
 
-      <PersonModal person={selectedPerson} onClose={() => setSelectedPerson(null)} />
+      <PersonModal person={selectedPerson} relationships={relationships} onClose={() => setSelectedPerson(null)} />
     </div>
   )
 }
