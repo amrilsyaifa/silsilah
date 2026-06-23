@@ -1,11 +1,12 @@
 'use client'
 
-import { Component, ReactNode, useEffect, useState } from 'react'
+import { Component, ReactNode, useEffect, useState, lazy, Suspense } from 'react'
 import { collection, getDocs, orderBy, query } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Person, Relationship } from '@/lib/types'
 import { loadPositions, NodePosition } from '@/lib/position-store'
-import FamilyTree from '@/components/FamilyTree'
+
+const FamilyTree = lazy(() => import('@/components/FamilyTree'))
 
 class TreeErrorBoundary extends Component<
   { children: ReactNode },
@@ -127,11 +128,17 @@ export default function HomePage() {
 
       <div className="flex-1 min-h-0">
         <TreeErrorBoundary>
-          <FamilyTree
-            persons={persons}
-            relationships={relationships}
-            savedPositions={positions}
-          />
+          <Suspense fallback={
+            <div className="flex h-full items-center justify-center">
+              <div className="text-4xl animate-pulse">🌳</div>
+            </div>
+          }>
+            <FamilyTree
+              persons={persons}
+              relationships={relationships}
+              savedPositions={positions}
+            />
+          </Suspense>
         </TreeErrorBoundary>
       </div>
     </div>
