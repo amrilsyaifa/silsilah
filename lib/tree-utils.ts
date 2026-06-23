@@ -228,12 +228,12 @@ export function buildTreeElements(
   return { nodes, edges: [...parentChildEdges, ...spouseEdges], rootId }
 }
 
-const DESCENDANT_LABELS = ['Anak', 'Cucu', 'Cicit', 'Piut', 'Canggah']
+const DESCENDANT_LABELS = ['Anak', 'Cucu', 'Cicit', 'Piut', 'Anggas']
 
 export function countDescendants(
   personId: string,
   relationships: Relationship[]
-): { label: string; count: number }[] {
+): { label: string; count: number; personIds: string[] }[] {
   const childrenOf = new Map<string, string[]>()
   for (const r of relationships) {
     if (r.type === 'father' || r.type === 'mother') {
@@ -251,7 +251,7 @@ export function countDescendants(
     }
   }
 
-  const results: { label: string; count: number }[] = []
+  const results: { label: string; count: number; personIds: string[] }[] = []
   let currentLevel = [personId]
   let depth = 0
 
@@ -268,12 +268,50 @@ export function countDescendants(
     const label = depth < DESCENDANT_LABELS.length
       ? DESCENDANT_LABELS[depth]
       : `Keturunan level ${depth + 1}`
-    results.push({ label, count: seen.size })
+    results.push({ label, count: seen.size, personIds: [...seen] })
     currentLevel = [...seen]
     depth++
   }
 
   return results
+}
+
+export function getDescendantIds(
+  personId: string,
+  relationships: Relationship[]
+): Set<string> {
+  const childrenOf = new Map<string, string[]>()
+  for (const r of relationships) {
+    if (r.type === 'father' || r.type === 'mother') {
+      if (!childrenOf.has(r.person_id)) childrenOf.set(r.person_id, [])
+      const arr = childrenOf.get(r.person_id)!
+      if (!arr.includes(r.related_person_id)) arr.push(r.related_person_id)
+    }
+  }
+
+  const spouseOf = new Map<string, string>()
+  for (const r of relationships) {
+    if (r.type === 'spouse') {
+      spouseOf.set(r.person_id, r.related_person_id)
+      spouseOf.set(r.related_person_id, r.person_id)
+    }
+  }
+
+  const ids = new Set<string>()
+  const queue = [personId]
+  while (queue.length > 0) {
+    const id = queue.shift()!
+    if (ids.has(id)) continue
+    ids.add(id)
+    const spouse = spouseOf.get(id)
+    if (spouse) ids.add(spouse)
+    for (const kid of childrenOf.get(id) ?? []) queue.push(kid)
+    if (spouse) {
+      for (const kid of childrenOf.get(spouse) ?? []) queue.push(kid)
+    }
+  }
+
+  return ids
 }
 
 export function formatPhone(phone: string): string {

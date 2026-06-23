@@ -1,19 +1,28 @@
 'use client'
 
+import { useState } from 'react'
 import { Person, Relationship } from '@/lib/types'
 import { formatPhone, countDescendants } from '@/lib/tree-utils'
 
 interface Props {
   person: Person | null
+  persons: Person[]
   relationships: Relationship[]
   onClose: () => void
 }
 
-export default function PersonModal({ person, relationships, onClose }: Props) {
+export default function PersonModal({ person, persons, relationships, onClose }: Props) {
+  const [expandedLevel, setExpandedLevel] = useState<string | null>(null)
+
   if (!person) return null
 
   const icon = person.gender === 'male' ? '👨' : '🧕'
   const descendants = countDescendants(person.id, relationships)
+  const personMap = new Map(persons.map((p) => [p.id, p]))
+
+  const toggleLevel = (label: string) => {
+    setExpandedLevel((prev) => (prev === label ? null : label))
+  }
 
   return (
     <div
@@ -21,7 +30,7 @@ export default function PersonModal({ person, relationships, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 space-y-4 animate-slide-up"
+        className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 space-y-4 animate-slide-up max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -63,13 +72,40 @@ export default function PersonModal({ person, relationships, onClose }: Props) {
         {descendants.length > 0 && (
           <>
             <hr className="border-slate-100" />
-            <div className="space-y-2 text-sm">
-              <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Keturunan</p>
-              {descendants.map((d) => (
-                <Row key={d.label} label={d.label}>
-                  {d.count} orang
-                </Row>
-              ))}
+            <div className="space-y-1 text-sm">
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">Keturunan</p>
+              {descendants.map((d) => {
+                const isExpanded = expandedLevel === d.label
+                return (
+                  <div key={d.label}>
+                    <button
+                      onClick={() => toggleLevel(d.label)}
+                      className="flex items-center gap-2 w-full py-1.5 hover:bg-slate-50 rounded-lg px-1 -mx-1 transition-colors"
+                    >
+                      <span className="text-xs text-slate-400 transition-transform" style={{ transform: isExpanded ? 'rotate(90deg)' : undefined }}>
+                        ▶
+                      </span>
+                      <span className="text-slate-400 w-24 shrink-0 text-left">{d.label}</span>
+                      <span className="text-slate-700 font-medium">{d.count} orang</span>
+                    </button>
+                    {isExpanded && (
+                      <div className="ml-6 mt-1 mb-2 space-y-1 max-h-48 overflow-y-auto">
+                        {d.personIds.map((id) => {
+                          const p = personMap.get(id)
+                          if (!p) return null
+                          return (
+                            <div key={id} className="flex items-center gap-2 text-sm py-0.5">
+                              <span className="text-base">{p.gender === 'male' ? '👨' : '🧕'}</span>
+                              <span className="text-slate-700">{p.name}</span>
+                              {!p.is_alive && <span className="text-xs text-slate-400">†</span>}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </>
         )}

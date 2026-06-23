@@ -1,6 +1,6 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, useCallback } from 'react'
 import { Handle, Position, NodeProps, Node } from '@xyflow/react'
 import { NODE_WIDTH, PersonNodeData } from '@/lib/tree-utils'
 
@@ -9,13 +9,24 @@ const ROOT_WIDTH = 230
 type PersonNodeProps = NodeProps<Node<PersonNodeData>>
 
 function PersonNode({ data, selected }: PersonNodeProps) {
-  const { person, isRoot } = data
+  const { person, isRoot, onPointerDown, onPointerUp } = data
   const isMale = person.gender === 'male'
   const width = isRoot ? ROOT_WIDTH : NODE_WIDTH
+
+  const handlePointerDown = useCallback(() => {
+    if (onPointerDown) (onPointerDown as (id: string) => void)(person.id)
+  }, [onPointerDown, person.id])
+
+  const handlePointerUp = useCallback(() => {
+    if (onPointerUp) (onPointerUp as () => void)()
+  }, [onPointerUp])
 
   return (
     <div
       style={{ width }}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
       className={`
         rounded-2xl border-2 shadow-md cursor-pointer select-none
         transition-all duration-200
