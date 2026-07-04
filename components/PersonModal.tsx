@@ -2,26 +2,62 @@
 
 import { useState } from 'react'
 import { Person, Relationship } from '@/lib/types'
-import { formatPhone, countDescendants } from '@/lib/tree-utils'
+import { DESCENDANT_LABELS, formatPhone, countDescendants } from '@/lib/tree-utils'
 
 interface Props {
   person: Person | null
   persons: Person[]
   relationships: Relationship[]
+  visibleLevels: Set<string>
+  onVisibleLevelsChange: (levels: Set<string>) => void
   onClose: () => void
 }
 
-export default function PersonModal({ person, persons, relationships, onClose }: Props) {
+export default function PersonModal({
+  person,
+  persons,
+  relationships,
+  visibleLevels,
+  onVisibleLevelsChange,
+  onClose,
+}: Props) {
   const [expandedLevel, setExpandedLevel] = useState<string | null>(null)
+  const [filterOpen, setFilterOpen] = useState(false)
 
   if (!person) return null
 
   const icon = person.gender === 'male' ? '👨' : '🧕'
   const descendants = countDescendants(person.id, relationships)
+  const firstHiddenIndex = descendants.findIndex(
+    (d, index) =>
+      !visibleLevels.has(
+        DESCENDANT_LABELS[Math.min(index, DESCENDANT_LABELS.length - 1)] ?? d.label
+      )
+  )
+  const visibleDescendants = firstHiddenIndex === -1
+    ? descendants
+    : descendants.slice(0, firstHiddenIndex)
   const personMap = new Map(persons.map((p) => [p.id, p]))
 
   const toggleLevel = (label: string) => {
     setExpandedLevel((prev) => (prev === label ? null : label))
+  }
+
+  const toggleVisibleLevel = (label: string) => {
+    const index = DESCENDANT_LABELS.indexOf(label)
+    if (index === -1) return
+
+    const next = new Set(visibleLevels)
+    if (next.has(label)) {
+      for (let i = index; i < DESCENDANT_LABELS.length; i++) {
+        next.delete(DESCENDANT_LABELS[i])
+      }
+    } else {
+      for (let i = 0; i <= index; i++) {
+        next.add(DESCENDANT_LABELS[i])
+      }
+    }
+    onVisibleLevelsChange(next)
   }
 
   return (
@@ -73,8 +109,46 @@ export default function PersonModal({ person, persons, relationships, onClose }:
           <>
             <hr className="border-slate-100" />
             <div className="space-y-1 text-sm">
-              <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">Keturunan</p>
-              {descendants.map((d) => {
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Keturunan</p>
+                <button
+                  type="button"
+                  onClick={() => setFilterOpen((prev) => !prev)}
+                  className="flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200"
+                >
+                  <span
+                    className="text-[10px] transition-transform"
+                    style={{ transform: filterOpen ? 'rotate(90deg)' : undefined }}
+                  >
+                    ▶
+                  </span>
+                  {filterOpen ? 'Hide' : 'Show'} filter
+                </button>
+              </div>
+              {filterOpen && (
+                <div className="grid grid-cols-2 gap-2 pb-3 sm:grid-cols-3">
+                  {DESCENDANT_LABELS.map((label) => (
+                    <label
+                      key={label}
+                      className="flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={visibleLevels.has(label)}
+                        onChange={() => toggleVisibleLevel(label)}
+                        className="h-4 w-4 rounded border-slate-300 accent-blue-600"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              )}
+              {visibleDescendants.length === 0 && (
+                <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-400">
+                  Semua kategori keturunan disembunyikan.
+                </p>
+              )}
+              {visibleDescendants.map((d) => {
                 const isExpanded = expandedLevel === d.label
                 return (
                   <div key={d.label}>

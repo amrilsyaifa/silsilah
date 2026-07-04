@@ -228,7 +228,7 @@ export function buildTreeElements(
   return { nodes, edges: [...parentChildEdges, ...spouseEdges], rootId }
 }
 
-const DESCENDANT_LABELS = ['Anak', 'Cucu', 'Cicit', 'Piut', 'Anggas']
+export const DESCENDANT_LABELS = ['Anak', 'Cucu', 'Cicit', 'Piut', 'Anggas']
 
 export function countDescendants(
   personId: string,

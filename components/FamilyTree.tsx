@@ -15,7 +15,12 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { Person, Relationship } from "@/lib/types";
-import { buildTreeElements, PersonNodeData } from "@/lib/tree-utils";
+import {
+  buildTreeElements,
+  countDescendants,
+  DESCENDANT_LABELS,
+  PersonNodeData,
+} from "@/lib/tree-utils";
 import PersonNode from "./PersonNode";
 import PersonModal from "./PersonModal";
 import SearchBar from "./SearchBar";
@@ -48,6 +53,10 @@ function TreeInner({
   const [matchList, setMatchList] = useState<string[]>([]);
   const [matchIndex, setMatchIndex] = useState(0);
   const [longPressPerson, setLongPressPerson] = useState<Person | null>(null);
+  const [filterPerson, setFilterPerson] = useState<Person | null>(null);
+  const [visibleLevels, setVisibleLevels] = useState<Set<string>>(
+    () => new Set(DESCENDANT_LABELS),
+  );
 
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const didLongPress = useRef(false);
@@ -99,9 +108,84 @@ function TreeInner({
     [persons, relationships, savedPositions],
   );
 
+  const hiddenNodeIds = useMemo(() => {
+    if (!filterPerson) return new Set<string>();
+
+    const descendants = countDescendants(filterPerson.id, relationships);
+    const firstHiddenIndex = descendants.findIndex(
+      (d, index) =>
+        !visibleLevels.has(
+          DESCENDANT_LABELS[Math.min(index, DESCENDANT_LABELS.length - 1)] ??
+            d.label,
+        ),
+    );
+
+    if (firstHiddenIndex === -1) return new Set<string>();
+
+    const hidden = new Set(
+      descendants
+        .slice(firstHiddenIndex)
+        .flatMap((descendant) => descendant.personIds),
+    );
+
+    const childrenOf = new Map<string, string[]>();
+    const spouseOf = new Map<string, string>();
+    for (const relationship of relationships) {
+      if (relationship.type === "father" || relationship.type === "mother") {
+        const children = childrenOf.get(relationship.person_id) ?? [];
+        if (!children.includes(relationship.related_person_id)) {
+          children.push(relationship.related_person_id);
+        }
+        childrenOf.set(relationship.person_id, children);
+      }
+
+      if (relationship.type === "spouse") {
+        spouseOf.set(relationship.person_id, relationship.related_person_id);
+        spouseOf.set(relationship.related_person_id, relationship.person_id);
+      }
+    }
+
+    const queue = [...hidden];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      const spouse = spouseOf.get(id);
+      if (spouse && !hidden.has(spouse)) {
+        hidden.add(spouse);
+        queue.push(spouse);
+      }
+
+      for (const childId of childrenOf.get(id) ?? []) {
+        if (!hidden.has(childId)) {
+          hidden.add(childId);
+          queue.push(childId);
+        }
+      }
+    }
+
+    return hidden;
+  }, [filterPerson, relationships, visibleLevels]);
+
+  const visibleTreeNodes = useMemo(
+    () => initialNodes.filter((n) => !hiddenNodeIds.has(n.id)),
+    [initialNodes, hiddenNodeIds],
+  );
+
+  const visibleNodeIds = useMemo(
+    () => new Set(visibleTreeNodes.map((n) => n.id)),
+    [visibleTreeNodes],
+  );
+
+  const visibleTreeEdges = useMemo(
+    () =>
+      initialEdges.filter(
+        (e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target),
+      ),
+    [initialEdges, visibleNodeIds],
+  );
+
   const nodesWithCallbacks = useMemo(
     () =>
-      initialNodes.map((n) => ({
+      visibleTreeNodes.map((n) => ({
         ...n,
         data: {
           ...n.data,
@@ -109,15 +193,16 @@ function TreeInner({
           onPointerUp: onPointerUpNode,
         },
       })),
-    [initialNodes, onPointerDownNode, onPointerUpNode],
+    [visibleTreeNodes, onPointerDownNode, onPointerUpNode],
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(nodesWithCallbacks);
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(visibleTreeEdges);
 
   useEffect(() => {
     setNodes(nodesWithCallbacks);
-  }, [nodesWithCallbacks, setNodes]);
+    setEdges(visibleTreeEdges);
+  }, [nodesWithCallbacks, setNodes, setEdges, visibleTreeEdges]);
 
   useEffect(() => {
     if (!rootId) return;
@@ -134,7 +219,7 @@ function TreeInner({
 
   const navigateToMatch = useCallback(
     (matchId: string) => {
-      const node = initialNodes.find((n) => n.id === matchId);
+      const node = visibleTreeNodes.find((n) => n.id === matchId);
       if (node) {
         setCenter(node.position.x + 95, node.position.y + 45, {
           zoom: 1.2,
@@ -142,7 +227,7 @@ function TreeInner({
         });
       }
     },
-    [initialNodes, setCenter],
+    [visibleTreeNodes, setCenter],
   );
 
   const handleSearch = useCallback(
@@ -157,8 +242,8 @@ function TreeInner({
       }
 
       const lower = query.toLowerCase();
-      const matches = persons.filter((p) =>
-        p.name.toLowerCase().includes(lower),
+      const matches = persons.filter(
+        (p) => visibleNodeIds.has(p.id) && p.name.toLowerCase().includes(lower),
       );
       const ids = new Set(matches.map((p) => p.id));
       const list = matches.map((p) => p.id);
@@ -179,7 +264,7 @@ function TreeInner({
         navigateToMatch(list[0]);
       }
     },
-    [persons, setNodes, navigateToMatch],
+    [persons, setNodes, navigateToMatch, visibleNodeIds],
   );
 
   const handleNextMatch = useCallback(() => {
@@ -203,10 +288,14 @@ function TreeInner({
         return;
       }
       if (!editable) {
+        if (filterPerson?.id !== node.data.person.id) {
+          setVisibleLevels(new Set(DESCENDANT_LABELS));
+          setFilterPerson(node.data.person);
+        }
         setSelectedPerson(node.data.person);
       }
     },
-    [editable],
+    [editable, filterPerson],
   );
 
   const onNodeContextMenu = useCallback((e: React.MouseEvent) => {
@@ -270,9 +359,12 @@ function TreeInner({
       </ReactFlow>
 
       <PersonModal
+        key={selectedPerson?.id ?? "empty"}
         person={selectedPerson}
         persons={persons}
         relationships={relationships}
+        visibleLevels={visibleLevels}
+        onVisibleLevelsChange={setVisibleLevels}
         onClose={() => setSelectedPerson(null)}
       />
 
