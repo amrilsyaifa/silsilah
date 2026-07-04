@@ -10,6 +10,7 @@ interface Props {
   relationships: Relationship[]
   visibleLevels: Set<string>
   onVisibleLevelsChange: (levels: Set<string>) => void
+  onExportImage: () => Promise<void>
   onClose: () => void
 }
 
@@ -19,10 +20,13 @@ export default function PersonModal({
   relationships,
   visibleLevels,
   onVisibleLevelsChange,
+  onExportImage,
   onClose,
 }: Props) {
   const [expandedLevel, setExpandedLevel] = useState<string | null>(null)
   const [filterOpen, setFilterOpen] = useState(false)
+  const [exportingImage, setExportingImage] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   if (!person) return null
 
@@ -58,6 +62,21 @@ export default function PersonModal({
       }
     }
     onVisibleLevelsChange(next)
+  }
+
+  const handleExportImage = async () => {
+    try {
+      setExportError(null)
+      setExportingImage(true)
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve())
+      })
+      await onExportImage()
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Gagal export image.')
+    } finally {
+      setExportingImage(false)
+    }
   }
 
   return (
@@ -182,6 +201,25 @@ export default function PersonModal({
               })}
             </div>
           </>
+        )}
+
+        <button
+          type="button"
+          onClick={handleExportImage}
+          disabled={exportingImage}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 py-3 font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+        >
+          {exportingImage ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          ) : (
+            <span>⬇</span>
+          )}
+          {exportingImage ? 'Membuat image...' : 'Export Image JPG'}
+        </button>
+        {exportError && (
+          <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">
+            {exportError}
+          </p>
         )}
 
         {/* WA Button */}
