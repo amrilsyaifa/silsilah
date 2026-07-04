@@ -232,11 +232,15 @@ export const DESCENDANT_LABELS = ['Anak', 'Cucu', 'Cicit', 'Piut', 'Anggas']
 
 export function countDescendants(
   personId: string,
-  relationships: Relationship[]
+  relationships: Relationship[],
+  validPersonIds?: Set<string>
 ): { label: string; count: number; personIds: string[] }[] {
   const childrenOf = new Map<string, string[]>()
   for (const r of relationships) {
     if (r.type === 'father' || r.type === 'mother') {
+      if (validPersonIds && (!validPersonIds.has(r.person_id) || !validPersonIds.has(r.related_person_id))) {
+        continue
+      }
       if (!childrenOf.has(r.person_id)) childrenOf.set(r.person_id, [])
       const arr = childrenOf.get(r.person_id)!
       if (!arr.includes(r.related_person_id)) arr.push(r.related_person_id)
@@ -246,6 +250,9 @@ export function countDescendants(
   const spouseOf = new Map<string, string>()
   for (const r of relationships) {
     if (r.type === 'spouse') {
+      if (validPersonIds && (!validPersonIds.has(r.person_id) || !validPersonIds.has(r.related_person_id))) {
+        continue
+      }
       spouseOf.set(r.person_id, r.related_person_id)
       spouseOf.set(r.related_person_id, r.person_id)
     }

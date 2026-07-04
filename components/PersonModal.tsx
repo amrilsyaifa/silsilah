@@ -31,7 +31,9 @@ export default function PersonModal({
   if (!person) return null
 
   const icon = person.gender === 'male' ? '👨' : '🧕'
-  const descendants = countDescendants(person.id, relationships)
+  const personMap = new Map(persons.map((p) => [p.id, p]))
+  const personIds = new Set(personMap.keys())
+  const descendants = countDescendants(person.id, relationships, personIds)
   const firstHiddenIndex = descendants.findIndex(
     (d, index) =>
       !visibleLevels.has(
@@ -41,7 +43,6 @@ export default function PersonModal({
   const visibleDescendants = firstHiddenIndex === -1
     ? descendants
     : descendants.slice(0, firstHiddenIndex)
-  const personMap = new Map(persons.map((p) => [p.id, p]))
 
   const toggleLevel = (label: string) => {
     setExpandedLevel((prev) => (prev === label ? null : label))

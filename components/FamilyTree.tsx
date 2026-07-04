@@ -79,6 +79,10 @@ function TreeInner({
     () => new Map(persons.map((p) => [p.id, p])),
     [persons],
   );
+  const personIds = useMemo(
+    () => new Set(persons.map((p) => p.id)),
+    [persons],
+  );
 
   const onLongPress = useCallback(
     (personId: string) => {
@@ -118,7 +122,7 @@ function TreeInner({
   const hiddenNodeIds = useMemo(() => {
     if (!filterPerson) return new Set<string>();
 
-    const descendants = countDescendants(filterPerson.id, relationships);
+    const descendants = countDescendants(filterPerson.id, relationships, personIds);
     const firstHiddenIndex = descendants.findIndex(
       (d, index) =>
         !visibleLevels.has(
@@ -170,7 +174,7 @@ function TreeInner({
     }
 
     return hidden;
-  }, [filterPerson, relationships, visibleLevels]);
+  }, [filterPerson, relationships, visibleLevels, personIds]);
 
   const visibleTreeNodes = useMemo(
     () => initialNodes.filter((n) => !hiddenNodeIds.has(n.id)),
