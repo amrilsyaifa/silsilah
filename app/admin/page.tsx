@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   collection,
@@ -22,7 +23,7 @@ import RelationshipManager from '@/components/admin/RelationshipManager'
 import FamilyTree from '@/components/FamilyTree'
 import { exportBackup, importBackup } from '@/lib/backup'
 
-type Tab = 'persons' | 'relationships' | 'layout' | 'backup'
+type Tab = 'persons' | 'relationships' | 'audit' | 'layout' | 'backup'
 type Modal = { type: 'add' } | { type: 'edit'; person: Person } | null
 
 export default function AdminPage() {
@@ -152,7 +153,7 @@ export default function AdminPage() {
       {/* Header */}
       <header className="bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shrink-0">
         <div className="flex items-center gap-2">
-          <a href="/" className="text-slate-400 hover:text-slate-600 text-sm">←</a>
+          <Link href="/" className="text-slate-400 hover:text-slate-600 text-sm">←</Link>
           <span className="text-2xl">🌳</span>
           <h1 className="font-bold text-slate-800">Admin Panel</h1>
         </div>
@@ -167,10 +168,11 @@ export default function AdminPage() {
       {/* Tabs */}
       <div className={`${tab === 'layout' ? '' : 'max-w-4xl mx-auto'} p-4 ${tab === 'layout' ? 'flex flex-col flex-1 min-h-0 space-y-3' : 'space-y-4'}`}>
         <div className="flex gap-2 shrink-0">
-          {(['persons', 'relationships', 'layout', 'backup'] as Tab[]).map((t) => {
+          {(['persons', 'relationships', 'audit', 'layout', 'backup'] as Tab[]).map((t) => {
             const labels: Record<Tab, string> = {
               persons: '👥 Anggota',
               relationships: '🔗 Relasi',
+              audit: '🧭 Audit',
               layout: '📐 Layout',
               backup: '💾 Backup',
             }
@@ -263,6 +265,15 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* Audit tab */}
+        {tab === 'audit' && (
+          <RelationshipAuditTab
+            persons={persons}
+            relationships={relationships}
+            onEdit={(person) => setModal({ type: 'edit', person })}
+          />
+        )}
+
         {/* Layout tab */}
         {tab === 'layout' && (
           <>
@@ -332,10 +343,220 @@ export default function AdminPage() {
   )
 }
 
+type AuditFilter = 'noLinks' | 'noSpouse' | 'noChildren' | 'noSpouseAndChildren'
+
+function RelationshipAuditTab({
+  persons,
+  relationships,
+  onEdit,
+}: {
+  persons: Person[]
+  relationships: Relationship[]
+  onEdit: (person: Person) => void
+}) {
+  const [filter, setFilter] = useState<AuditFilter>('noSpouseAndChildren')
+  const [query, setQuery] = useState('')
+
+  const relationInfo = new Map<
+    string,
+    { spouses: Set<string>; children: Set<string>; parents: Set<string>; any: number }
+  >()
+
+  for (const person of persons) {
+    relationInfo.set(person.id, {
+      spouses: new Set(),
+      children: new Set(),
+      parents: new Set(),
+      any: 0,
+    })
+  }
+
+  for (const rel of relationships) {
+    const source = relationInfo.get(rel.person_id)
+    const target = relationInfo.get(rel.related_person_id)
+    if (!source || !target) continue
+
+    source.any++
+    target.any++
+
+    if (rel.type === 'spouse') {
+      source.spouses.add(rel.related_person_id)
+      target.spouses.add(rel.person_id)
+    } else {
+      source.children.add(rel.related_person_id)
+      target.parents.add(rel.person_id)
+    }
+  }
+
+  const rows = persons
+    .map((person) => {
+      const info = relationInfo.get(person.id)!
+      return {
+        person,
+        spouseCount: info.spouses.size,
+        childCount: info.children.size,
+        parentCount: info.parents.size,
+        relationCount: info.any,
+      }
+    })
+    .filter((row) => {
+      if (filter === 'noLinks') return row.relationCount === 0
+      if (filter === 'noSpouse') return row.spouseCount === 0
+      if (filter === 'noChildren') return row.childCount === 0
+      return row.spouseCount === 0 && row.childCount === 0
+    })
+    .filter((row) => row.person.name.toLowerCase().includes(query.toLowerCase()))
+
+  const counts: Record<AuditFilter, number> = {
+    noLinks: persons.filter((person) => relationInfo.get(person.id)!.any === 0).length,
+    noSpouse: persons.filter((person) => relationInfo.get(person.id)!.spouses.size === 0).length,
+    noChildren: persons.filter((person) => relationInfo.get(person.id)!.children.size === 0).length,
+    noSpouseAndChildren: persons.filter((person) => {
+      const info = relationInfo.get(person.id)!
+      return info.spouses.size === 0 && info.children.size === 0
+    }).length,
+  }
+
+  const filters: { id: AuditFilter; label: string; description: string }[] = [
+    {
+      id: 'noSpouseAndChildren',
+      label: 'Tanpa pasangan & anak',
+      description: 'Tidak punya pasangan dan tidak punya anak.',
+    },
+    {
+      id: 'noLinks',
+      label: 'Tanpa relasi apapun',
+      description: 'Tidak terhubung sebagai anak, orang tua, atau pasangan.',
+    },
+    {
+      id: 'noSpouse',
+      label: 'Tanpa pasangan',
+      description: 'Belum punya relasi suami/istri.',
+    },
+    {
+      id: 'noChildren',
+      label: 'Tanpa anak',
+      description: 'Belum punya relasi ayah/ibu ke anak.',
+    },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="font-bold text-slate-800">Audit Relasi</h2>
+            <p className="text-sm text-slate-500">
+              Cari anggota yang belum punya pasangan atau anak untuk membantu trace data yang belum lengkap.
+            </p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            <span className="font-semibold">{rows.length}</span> hasil
+          </div>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {filters.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setFilter(item.id)}
+              className={`rounded-xl border px-3 py-3 text-left transition ${
+                filter === item.id
+                  ? 'border-blue-200 bg-blue-50 text-blue-700'
+                  : 'border-slate-100 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold">{item.label}</span>
+                <span className="rounded-lg bg-white/80 px-2 py-0.5 text-xs font-bold">
+                  {counts[item.id]}
+                </span>
+              </div>
+              <p className="mt-1 text-xs opacity-70">{item.description}</p>
+            </button>
+          ))}
+        </div>
+
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Cari nama di hasil audit..."
+          className="input"
+        />
+      </div>
+
+      <div className="space-y-2">
+        {rows.length === 0 && (
+          <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center text-sm text-slate-400">
+            Tidak ada data untuk filter ini.
+          </div>
+        )}
+
+        {rows.map(({ person, spouseCount, childCount, parentCount, relationCount }) => (
+          <div
+            key={person.id}
+            className="bg-white rounded-2xl border border-slate-100 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="text-2xl shrink-0">{person.gender === 'male' ? '👨' : '🧕'}</span>
+              <div className="min-w-0">
+                <p className="font-semibold text-slate-800 truncate">{person.name}</p>
+                <p className="text-xs text-slate-400">
+                  {person.gender === 'male' ? 'Laki-laki' : 'Perempuan'}
+                  {!person.is_alive && ` · ${person.gender === 'male' ? 'رَحِمَهُ ٱللَّٰهُ' : 'رَحِمَهَا ٱللَّٰهُ'}`}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              <RelationPill label="Pasangan" value={spouseCount} tone={spouseCount === 0 ? 'red' : 'green'} />
+              <RelationPill label="Anak" value={childCount} tone={childCount === 0 ? 'red' : 'green'} />
+              <RelationPill label="Ortu" value={parentCount} tone={parentCount === 0 ? 'slate' : 'green'} />
+              <RelationPill label="Relasi" value={relationCount} tone={relationCount === 0 ? 'red' : 'slate'} />
+              <button
+                type="button"
+                onClick={() => onEdit(person)}
+                className="btn-secondary py-1.5! px-3! text-xs"
+              >
+                Edit
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function RelationPill({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: number
+  tone: 'green' | 'red' | 'slate'
+}) {
+  const styles = {
+    green: 'bg-green-50 text-green-700',
+    red: 'bg-red-50 text-red-600',
+    slate: 'bg-slate-50 text-slate-500',
+  }
+
+  return (
+    <span className={`rounded-lg px-2 py-1 text-xs font-semibold ${styles[tone]}`}>
+      {label}: {value}
+    </span>
+  )
+}
+
 function BackupTab({ onRestored }: { onRestored: () => Promise<void> }) {
   const [exporting, setExporting] = useState(false)
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const handleExport = async () => {
@@ -352,17 +573,17 @@ function BackupTab({ onRestored }: { onRestored: () => Promise<void> }) {
   }
 
   const handleImport = async () => {
-    const file = fileRef.current?.files?.[0]
-    if (!file) return
+    if (!selectedFile) return
     if (!confirm('Ini akan menimpa SEMUA data yang ada. Lanjutkan?')) return
 
     setImporting(true)
     setResult(null)
     try {
-      const counts = await importBackup(file)
+      const counts = await importBackup(selectedFile)
       setResult(`Restore berhasil: ${counts.persons} anggota, ${counts.relationships} relasi, ${counts.node_positions} posisi.`)
       await onRestored()
       if (fileRef.current) fileRef.current.value = ''
+      setSelectedFile(null)
     } catch (err) {
       setResult(`Restore gagal: ${err instanceof Error ? err.message : 'Format tidak valid'}`)
     } finally {
@@ -393,9 +614,10 @@ function BackupTab({ onRestored }: { onRestored: () => Promise<void> }) {
           ref={fileRef}
           type="file"
           accept=".json"
+          onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
           className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
         />
-        <button onClick={handleImport} disabled={importing || !fileRef.current?.files?.length} className="btn-danger">
+        <button onClick={handleImport} disabled={importing || !selectedFile} className="btn-danger">
           {importing ? 'Memulihkan...' : '📤 Restore Data'}
         </button>
       </div>
