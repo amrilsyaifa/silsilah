@@ -316,8 +316,10 @@ export default function PersonModal({
                                         {p.name}
                                       </span>
                                       {!p.is_alive && (
-                                        <span className="text-xs text-slate-400">
-                                          †
+                                        <span className="text-xs text-slate-400 opacity-70 blur-[0.25px]">
+                                          {p.gender === "male"
+                                            ? "رَحِمَهُ ٱللَّٰهُ"
+                                            : "رَحِمَهَا ٱللَّٰهُ"}
                                         </span>
                                       )}
                                     </div>
